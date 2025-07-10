@@ -1,0 +1,80 @@
+To share files between your Windows host machine and the Cloudera Linux-based VM (running in Oracle VirtualBox), you can use Shared Folders. Here's how to set it up properly:
+
+🛠️ Step-by-Step: Add Files from Host (Windows) to Cloudera VM (Linux)
+✅ 1. Install Guest Additions in the Cloudera VM (Required for Shared Folders)
+Start your Cloudera VM.
+
+In the VM window menu, go to:
+Devices > Insert Guest Additions CD image…
+
+Open a terminal in Cloudera VM.
+
+Mount and install the CD:
+
+bash
+Copy
+Edit
+sudo mkdir /mnt/cdrom
+sudo mount /dev/cdrom /mnt/cdrom
+cd /mnt/cdrom
+sudo ./VBoxLinuxAdditions.run
+Reboot the VM:
+
+bash
+Copy
+Edit
+sudo reboot
+If you get errors like “Kernel headers not found”, install them using:
+
+bash
+Copy
+Edit
+sudo yum install -y kernel-devel gcc make perl
+✅ 2. Create a Shared Folder in VirtualBox Settings
+Shut down the VM (do not suspend).
+
+In Oracle VM VirtualBox Manager, select the Cloudera VM and click Settings.
+
+Go to Shared Folders > Machine Folders > Click + (Add Folder icon).
+
+Set:
+
+Folder Path: Choose the folder on your Windows system you want to share.
+
+Folder Name: e.g., shared_data.
+
+Check Auto-mount and Make Permanent.
+
+Click OK and start the VM again.
+
+✅ 3. Access Shared Folder Inside Cloudera VM
+After rebooting, your shared folder should be available at:
+
+bash
+Copy
+Edit
+/media/sf_shared_data
+Note: If you get a "Permission Denied" error:
+
+🔒 Fix Permission Error
+Run:
+
+bash
+Copy
+Edit
+sudo usermod -aG vboxsf cloudera
+Then log out and log in again (or reboot).
+
+✅ 4. Now You Can Copy Files
+On Windows:
+
+Put files in the shared folder (e.g., D:\MyShared).
+
+On Cloudera VM:
+
+Access them at /media/sf_shared_data.
+
+💡 Tip: Alternate Method — SCP (if Shared Folders Don't Work)
+You can also use scp or WinSCP to transfer files via SSH if the network is configured correctly.
+
+Let me know if you want help setting up SCP, or if you're using a different version of Linux than the Cloudera QuickStart VM. 
