@@ -1,0 +1,385 @@
+/* hdfs write
+package com.hadoop.hdfs.writer;
+
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.util.Tool;
+
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.util.ToolRunner;
+
+public class HdfsWriter extends Configured implements Tool {
+    
+    public static final String FS_PARAM_NAME = "fs.defaultFS";
+    
+    public int run(String[] args) throws Exception {
+        
+        if (args.length < 2) {
+            System.err.println("HdfsWriter [local input path] [hdfs output path]");
+            return 1;
+        }
+        
+        String localInputPath = args[0];
+        Path outputPath = new Path(args[1]);
+
+        Configuration conf = getConf();
+        System.out.println("configured filesystem = " + conf.get(FS_PARAM_NAME));
+        FileSystem fs = FileSystem.get(conf);
+        if (fs.exists(outputPath)) {
+            System.err.println("output path exists");
+            return 1;
+        }
+        OutputStream os = fs.create(outputPath);
+        InputStream is = new BufferedInputStream(new FileInputStream(localInputPath));
+        IOUtils.copyBytes(is, os, conf);
+        return 0;
+    }
+    
+    public static void main( String[] args ) throws Exception {
+        int returnCode = ToolRunner.run(new HdfsWriter(), args);
+        System.exit(returnCode);
+    }
+}
+/*$ hadoop jar hdfswrite.jar com.hadoop.hdfs.writer.HdfsWriter /home/cloudera/Desktop/cpx1.txt /user/cloudera/bhaskar/vasmini.txt 
+
+
+/*hdfs read
+package com.hadoop.hdfs.reader;
+
+import java.io.BufferedOutputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+public class HdfsReader extends Configured implements Tool {
+    
+    public static final String FS_PARAM_NAME = "fs.defaultFS";
+    
+    public int run(String[] args) throws Exception {
+        
+        if (args.length < 2) {
+            System.err.println("HdfsReader [hdfs input path] [local output path]");
+            return 1;
+        }
+        
+        Path inputPath = new Path(args[0]);
+        String localOutputPath = args[1];
+        Configuration conf = getConf();
+        System.out.println("configured filesystem = " + conf.get(FS_PARAM_NAME));
+        FileSystem fs = FileSystem.get(conf);
+        InputStream is = fs.open(inputPath);
+        OutputStream os = new BufferedOutputStream(new FileOutputStream(localOutputPath));
+        IOUtils.copyBytes(is, os, conf);
+        return 0;
+    }
+    
+    public static void main( String[] args ) throws Exception {
+        int returnCode = ToolRunner.run(new HdfsReader(), args);
+        System.exit(returnCode);
+    }
+}
+/*hadoop jar readhdfs.jar  com.hadoop.hdfs.reader.HdfsReader /user/cloudera/bhaskar/tt.txt /home/cloudera/Desktop/cppp.txt
+
+/* Word count
+package com.sample;
+
+import java.io.IOException;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.Text;
+
+public class WordCountCombiner extends Reducer<Text,LongWritable,Text,LongWritable> 
+{
+	@Override
+	protected void reduce(Text key,Iterable<LongWritable> value,Context context)throws IOException,InterruptedException
+	{
+		long sum=0;
+		while(value.iterator().hasNext())
+		{
+			sum+=value.iterator().next().get();
+		}
+		context.write(key,new LongWritable(sum));
+	}
+	
+	
+
+}
+
+
+package com.sample;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+//import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.util.Tool;
+public class WordCountJob implements Tool{
+	private Configuration conf;
+	@Override
+	public Configuration getConf()
+	{
+	return conf;
+	}
+	@Override
+	public void setConf(Configuration conf)
+	{
+		this.conf=conf;
+	}
+	@Override
+	public int run(String []args)throws Exception
+	{
+		
+		Job wordcountjob=new Job(getConf());
+		wordcountjob.setJobName("mat word count");
+		wordcountjob.setJarByClass(this.getClass());
+		wordcountjob.setMapperClass(WordCountMapper.class);
+		wordcountjob.setReducerClass(WordCountReducer.class);
+		wordcountjob.setCombinerClass(WordCountCombiner.class);
+		
+		wordcountjob.setMapOutputKeyClass(Text.class);
+		wordcountjob.setMapOutputValueClass(LongWritable.class);
+		wordcountjob.setOutputKeyClass(Text.class);
+		wordcountjob.setOutputValueClass(LongWritable.class);
+		FileInputFormat.setInputPaths(wordcountjob,new Path(args[0]));
+		FileOutputFormat.setOutputPath(wordcountjob,new Path(args[1]));
+		wordcountjob.setNumReduceTasks(2);
+		return wordcountjob.waitForCompletion(true)==true? 0:1;
+	}
+	public static void main(String []args)throws Exception
+	{
+		ToolRunner.run(new Configuration(),new WordCountJob(),args);
+	}
+
+}
+
+
+package com.sample;
+
+import java.io.IOException;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+
+//import org.apache.hadoop.mapreduce.Counter;
+public class WordCountMapper extends
+		Mapper<LongWritable, Text, Text, LongWritable> {
+	
+	private final static LongWritable one = new LongWritable(1);
+
+	@Override
+	protected void map(LongWritable key, Text value, Context context)
+			throws IOException, InterruptedException {
+		String line = value.toString();
+		String[] words = line.split(" ");
+		for (int i = 0; i < words.length; i++) {
+			context.write(new Text(words[i]), one);
+		}
+		/*StringTokenizer strtock = new StringTokenizer(str);
+		while (strtock.hasMoreTokens()) {
+			temp.set(strtock.nextToken());
+			context.write(temp, one);
+		}*/
+	}
+
+}
+
+
+package com.sample;
+
+
+import java.io.IOException;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.Text;
+
+public class WordCountReducer extends Reducer<Text,LongWritable,Text,LongWritable> 
+{
+	@Override
+	protected void reduce(Text key,Iterable<LongWritable> value,Context context)throws IOException,InterruptedException
+	{
+		long sum=0;
+		while(value.iterator().hasNext())
+		{
+			sum+=value.iterator().next().get();
+		}
+		context.write(key,new LongWritable(sum));
+	}
+	
+	
+
+}
+/*[cloudera@localhost ~]$ hadoop jar wo1.jar com.sample.WordCountJob /user/cloudera/bhaskar/t.txt /user/cloudera/bhaskar/w10
+/* MAXTEMPERATURE
+package com.tem;
+
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+//import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+public class MaxTemperature {
+public static void main(String[] args) throws Exception {
+if (args.length != 2) {
+System.err.println("Usage: MaxTemperature <input path> <output path>");
+System.exit(-1);
+}
+Job job = new Job();
+job.setJarByClass(MaxTemperature.class);
+job.setJobName("Max temperature");
+FileInputFormat.addInputPath(job, new Path(args[0]));
+FileOutputFormat.setOutputPath(job, new Path(args[1]));
+job.setMapperClass(MaxTemperatureMapper.class);
+job.setReducerClass(MaxTemperatureReducer.class);
+job.setOutputKeyClass(Text.class);
+job.setOutputValueClass(IntWritable.class);
+System.exit(job.waitForCompletion(true) ? 0 : 1);
+}
+}
+
+
+
+package com.tem;
+
+import java.io.IOException;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+public class MaxTemperatureMapper
+extends Mapper<LongWritable, Text, Text, IntWritable> {
+private static final int MISSING = 9999;
+@Override
+public void map(LongWritable key, Text value, Context context)
+throws IOException, InterruptedException {
+String line = value.toString();
+String year = line.substring(15, 19);
+int airTemperature;
+if (line.charAt(87) == '+') { // parseInt doesn't like leading plus signs
+airTemperature = Integer.parseInt(line.substring(88, 92));
+} else {
+airTemperature = Integer.parseInt(line.substring(87, 92));
+}
+String quality = line.substring(92, 93);
+if (airTemperature != MISSING && quality.matches("[01459]")) {
+context.write(new Text(year), new IntWritable(airTemperature));
+}
+}
+}
+
+package com.tem;
+
+import java.io.IOException;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Reducer;
+public class MaxTemperatureReducer
+extends Reducer<Text, IntWritable, Text, IntWritable> {
+@Override
+public void reduce(Text key, Iterable<IntWritable> values,
+Context context)
+throws IOException, InterruptedException {
+int maxValue = Integer.MIN_VALUE;
+for (IntWritable value : values) {
+maxValue = Math.max(maxValue, value.get());
+}
+context.write(key, new IntWritable(maxValue));
+}
+}
+
+
+$ hadoop jar temp.jar com.tem.MaxTemperature /user/cloudera/bhaskar/tt2.txt /user/cloudera/bhaskar/w8
+/MRUNIT
+
+import java.io.IOException;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+public class MaxTemperatureMapper
+extends Mapper<LongWritable, Text, Text, IntWritable> {
+@Override
+public void map(LongWritable key, Text value, Context context)
+throws IOException, InterruptedException {
+String line = value.toString();
+String year = line.substring(15, 19);
+int airTemperature = Integer.parseInt(line.substring(87, 92));
+context.write(new Text(year), new IntWritable(airTemperature));
+}
+}
+
+
+import java.io.IOException;
+import java.util.Arrays;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mrunit.mapreduce.MapDriver;
+import org.apache.hadoop.mrunit.mapreduce.ReduceDriver;
+import org.junit.Test;
+public class MaxTemperatureMapperTest {
+	
+@Test
+public void processesValidRecord() throws IOException, InterruptedException {
+Text value = new Text("0043011990999991950051518004+68750+023550FM-12+0382" +
+"99999V0203201N00261220001CN9999999N9-00111+99999999999");
+new MapDriver<LongWritable, Text, Text, IntWritable>()
+.withMapper(new MaxTemperatureMapper())
+.withInput(new LongWritable(0), value)
+.withOutput(new Text("1950"), new IntWritable(-11))
+.runTest();
+}
+
+@Test
+public void returnsMaximumIntegerInValues() throws IOException,
+InterruptedException {
+new ReduceDriver<Text, IntWritable, Text, IntWritable>()
+.withReducer(new MaxTemperatureReducer())
+.withInput(new Text("1950"),
+Arrays.asList(new IntWritable(10), new IntWritable(5)))
+.withOutput(new Text("1950"), new IntWritable(10))
+.runTest();
+}
+}
+
+import java.io.IOException;
+
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Reducer;
+public class MaxTemperatureReducer
+extends Reducer<Text, IntWritable, Text, IntWritable> {
+@Override
+public void reduce(Text key, Iterable<IntWritable> values, Context context)
+throws IOException, InterruptedException {
+int maxValue = Integer.MIN_VALUE;
+for (IntWritable value : values) {
+maxValue = Math.max(maxValue, value.get());
+}
+context.write(key, new IntWritable(maxValue));
+}
+}
+
+
+
+
